@@ -17,4 +17,10 @@ _build
 *.code-workspace
 *.iml
 rebar3.crashdump
+rebar.lock
 *~
+node_modules
+*-lock.json
+.cache
+dist
+elm-stuff
