@@ -8,16 +8,14 @@ start(_StartType, _StartArgs) ->
 
     Dispatch = cowboy_router:compile([
     {'_', [
-        {"/ws/", hello_handler, []},
-        {"/js/[...]", cowboy_static, {priv_dir, chat, "js/"}},
-        {'_', cowboy_static, {priv_file, chat, "index.html"}}
+        {"/ws/", socket_handler, []},
+        {"/", cowboy_static, {priv_file, chat, "index.html"}},
+        {"/[...]", cowboy_static, {priv_dir, chat, ""}}
     ]}
 	]),
 	{ok, _} = cowboy:start_clear(http, [{port, 8088}], #{
 		env => #{dispatch => Dispatch}
 	}),
-
-    chat:start_link(),
     chat_sup:start_link().
 
 stop(_State) ->

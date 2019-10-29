@@ -6,7 +6,7 @@ import Html.Attributes exposing (..)
 import Html.Events exposing (onClick, onInput)
 import Json.Decode as Decode
 import Json.Encode as Encode
-import Port exposing (Action(..), Event(..), Message, eventDecoder, messageDecoder, onResponse, requestEncoder, toSocket, usersDecoder)
+import Port exposing (Action(..), Event(..), Message, MessageType(..), eventDecoder, joinEncoder, messageDecoder, messageEncoder, onResponse, toSocket, usernameDecoder, usersDecoder)
 
 
 type alias Model =
@@ -14,12 +14,15 @@ type alias Model =
     , nickname : String
     , users : List String
     , messages : List Message
+    , message : String
     }
 
 
 type Msg
     = OnNicknameType String
+    | OnMessageType String
     | JoinClick
+    | SendMessageClick
     | OnResponse String
 
 
@@ -34,6 +37,7 @@ init _ =
       , nickname = ""
       , users = []
       , messages = []
+      , message = ""
       }
     , Cmd.none
     )
@@ -49,6 +53,9 @@ update msg model =
         OnNicknameType nickname ->
             ( { model | nickname = String.trim nickname }, Cmd.none )
 
+        OnMessageType message ->
+            ( { model | message = message }, Cmd.none )
+
         JoinClick ->
             let
                 isValid =
@@ -56,10 +63,22 @@ update msg model =
             in
             case isValid of
                 True ->
-                    ( model, toSocket (requestEncoder model.nickname Join) )
+                    ( model, toSocket (joinEncoder model.nickname Join) )
 
                 False ->
                     ( model, Cmd.none )
+
+        SendMessageClick ->
+            let
+                isValid =
+                    String.trim model.message /= ""
+            in
+            case isValid of
+                True ->
+                    ( { model | message = "" }, toSocket (messageEncoder model.message SendMessage) )
+
+                False ->
+                    ( { model | message = "" }, Cmd.none )
 
         OnResponse json ->
             let
@@ -69,7 +88,7 @@ update msg model =
             case decodeResult of
                 Ok event ->
                     case event of
-                        ChatState ->
+                        UsersListState ->
                             let
                                 usersDecodeResult =
                                     Decode.decodeString usersDecoder json
@@ -87,8 +106,29 @@ update msg model =
                         SelfJoined ->
                             ( { model | status = Joined }, Cmd.none )
 
-                        UserJoined ->
-                            ( model, Cmd.none )
+                        NewUserJoined ->
+                            let
+                                systemMessage =
+                                    createSystemMessage event json
+                            in
+                            case systemMessage of
+                                Just sysMsg ->
+                                    ( { model | messages = sysMsg :: model.messages }, Cmd.none )
+
+                                Nothing ->
+                                    ( model, Cmd.none )
+
+                        UserDisconnected ->
+                            let
+                                systemMessage =
+                                    createSystemMessage event json
+                            in
+                            case systemMessage of
+                                Just sysMsg ->
+                                    ( { model | messages = sysMsg :: model.messages }, Cmd.none )
+
+                                Nothing ->
+                                    ( model, Cmd.none )
 
                         NewMessage ->
                             let
@@ -107,6 +147,28 @@ update msg model =
 
                 Err _ ->
                     ( model, Cmd.none )
+
+
+createSystemMessage : Event -> String -> Maybe Message
+createSystemMessage event json =
+    let
+        username =
+            case Decode.decodeString usernameDecoder json of
+                Ok usr ->
+                    usr
+
+                Err _ ->
+                    ""
+    in
+    case event of
+        NewUserJoined ->
+            Just (Message SystemMessage Nothing (username ++ " has been joined."))
+
+        UserDisconnected ->
+            Just (Message SystemMessage Nothing (username ++ " disconnected."))
+
+        _ ->
+            Nothing
 
 
 
@@ -134,20 +196,30 @@ renderChatScreen : Model -> Html Msg
 renderChatScreen model =
     div [ class "chat" ]
         [ renderUsersList model.nickname model.users
-        , renderChatWindow model.messages
+        , renderChatWindow model.message model.messages
         ]
 
 
-renderChatWindow : List Message -> Html Msg
-renderChatWindow messages =
+renderChatWindow : String -> List Message -> Html Msg
+renderChatWindow message messages =
     div [ class "content" ]
         [ div [ class "messages" ]
             [ ul [] (List.map renderSingleMessage messages)
             ]
         , div [ class "message-input" ]
             [ div [ class "wrap" ]
-                [ input [ type_ "text", placeholder "Write your message..." ] []
-                , button [ class "submit" ] [ text "Send" ]
+                [ input
+                    [ type_ "text"
+                    , placeholder "Write your message..."
+                    , onInput OnMessageType
+                    , value message
+                    ]
+                    []
+                , button
+                    [ class "submit"
+                    , onClick SendMessageClick
+                    ]
+                    [ text "Send" ]
                 ]
             ]
         ]
@@ -155,6 +227,22 @@ renderChatWindow messages =
 
 renderSingleMessage : Message -> Html Msg
 renderSingleMessage message =
+    case message.msgType of
+        SystemMessage ->
+            renderSystemMessage message
+
+        UserMessage ->
+            renderUserMessage message
+
+
+renderSystemMessage : Message -> Html Msg
+renderSystemMessage message =
+    li [ class "system" ]
+        [ p [] [ text message.message ] ]
+
+
+renderUserMessage : Message -> Html Msg
+renderUserMessage message =
     let
         from =
             case message.from of
@@ -165,7 +253,7 @@ renderSingleMessage message =
                     ""
     in
     li [ class "sent" ]
-        [ img [ src ("https://api.adorable.io/avatars/285/" ++ from ++ ".png") ] []
+        [ img [ src ("https://api.adorable.io/avatars/100/" ++ from ++ ".png") ] []
         , p [] [ text message.message ]
         ]
 
@@ -177,7 +265,7 @@ renderUsersList nickname users =
             [ div [ class "wrap" ]
                 [ img
                     [ class "online"
-                    , src ("https://api.adorable.io/avatars/285/" ++ nickname ++ ".png")
+                    , src ("https://api.adorable.io/avatars/100/" ++ nickname ++ ".png")
                     ]
                     []
                 , p [] [ text nickname ]
@@ -186,25 +274,30 @@ renderUsersList nickname users =
         , div [ class "contacts" ]
             [ ul []
                 (List.map
-                    renderSingleUser
+                    (renderSingleUser nickname)
                     users
                 )
             ]
         ]
 
 
-renderSingleUser : String -> Html Msg
-renderSingleUser nickname =
-    li [ class "contact" ]
-        [ div [ class "wrap" ]
-            [ img
-                [ src ("https://api.adorable.io/avatars/285/" ++ nickname ++ ".png")
+renderSingleUser : String -> String -> Html Msg
+renderSingleUser ownNickname nickname =
+    case nickname == ownNickname of
+        True ->
+            text ""
+
+        False ->
+            li [ class "contact" ]
+                [ div [ class "wrap" ]
+                    [ img
+                        [ src ("https://api.adorable.io/avatars/100/" ++ nickname ++ ".png")
+                        ]
+                        []
+                    , div [ class "meta" ]
+                        [ p [ class "name" ] [ text nickname ] ]
+                    ]
                 ]
-                []
-            , div [ class "meta" ]
-                [ p [ class "name" ] [ text nickname ] ]
-            ]
-        ]
 
 
 renderWelcomeScreen : String -> Html Msg

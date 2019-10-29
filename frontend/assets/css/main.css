@@ -178,19 +178,26 @@ body {
 }
 
 .chat .content .messages {
-    height    : auto;
+    height    : 100%;
+    margin-top: 10px;
     min-height: calc(100% - 93px);
-    max-height: calc(100% - 93px);
+    max-height: calc(100% - 55px);
     overflow-y: scroll;
     overflow-x: hidden;
 }
-
-.chat .content .messages::-webkit-scrollbar {
+.chat .content .messages ul {
+    display: flex;
+    flex-direction: column-reverse;
+    height: 100%;
+    overflow-y: scroll;
+    overflow-x: hidden;
+}
+.chat .content .messages ul::-webkit-scrollbar {
     width     : 8px;
     background: transparent;
 }
 
-.chat .content .messages::-webkit-scrollbar-thumb {
+.chat .content .messages ul::-webkit-scrollbar-thumb {
     background-color: rgba(0, 0, 0, 0.3);
 }
 
@@ -201,10 +208,6 @@ body {
     margin   : 15px 15px 5px 15px;
     width    : calc(100% - 25px);
     font-size: 0.9em;
-}
-
-.chat .content .messages ul li:nth-last-child(1) {
-    margin-bottom: 20px;
 }
 
 .chat .content .messages ul li.sent img {

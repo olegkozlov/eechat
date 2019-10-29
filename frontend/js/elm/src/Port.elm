@@ -1,4 +1,4 @@
-port module Port exposing (Action(..), Event(..), Message, eventDecoder, messageDecoder, onResponse, requestEncoder, toSocket, usersDecoder)
+port module Port exposing (Action(..), Event(..), Message, MessageType(..), eventDecoder, joinEncoder, messageDecoder, messageEncoder, onResponse, toSocket, usernameDecoder, usersDecoder)
 
 import Json.Decode as Decode
 import Json.Encode as Encode
@@ -26,9 +26,10 @@ type Action
 {-| Incoming event's: From Interloop to the Elm
 -}
 type Event
-    = ChatState
-    | SelfJoined
-    | UserJoined
+    = SelfJoined
+    | NewUserJoined
+    | UserDisconnected
+    | UsersListState
     | NewMessage
 
 
@@ -64,6 +65,11 @@ messageTypeFromString str =
             Decode.fail ("Invalid message type: " ++ str)
 
 
+usernameDecoder : Decode.Decoder String
+usernameDecoder =
+    Decode.at [ "payload", "username" ] Decode.string
+
+
 usersDecoder : Decode.Decoder (List String)
 usersDecoder =
     Decode.at [ "payload", "users" ] (Decode.list Decode.string)
@@ -78,14 +84,17 @@ eventDecoder =
 eventFromString : String -> Decode.Decoder Event
 eventFromString str =
     case str of
-        "ChatState" ->
-            Decode.succeed ChatState
+        "UsersListState" ->
+            Decode.succeed UsersListState
 
-        "SelfJoined" ->
+        "Joined" ->
             Decode.succeed SelfJoined
 
-        "UserJoined" ->
-            Decode.succeed UserJoined
+        "NewUserJoined" ->
+            Decode.succeed NewUserJoined
+
+        "UserDisconnected" ->
+            Decode.succeed UserDisconnected
 
         "NewMessage" ->
             Decode.succeed NewMessage
@@ -98,8 +107,16 @@ eventFromString str =
 -- ENCODERS
 
 
-requestEncoder : String -> Action -> Encode.Value
-requestEncoder nickname action =
+messageEncoder : String -> Action -> Encode.Value
+messageEncoder message action =
+    Encode.object
+        [ ( "message", Encode.string message )
+        , ( "action", actionToValue action )
+        ]
+
+
+joinEncoder : String -> Action -> Encode.Value
+joinEncoder nickname action =
     Encode.object
         [ ( "nickname", Encode.string nickname )
         , ( "action", actionToValue action )
@@ -113,7 +130,7 @@ actionToValue act =
             Encode.string "join"
 
         SendMessage ->
-            Encode.string "sendMessage"
+            Encode.string "message"
 
 
 
