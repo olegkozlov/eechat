@@ -1,2 +1,3 @@
 backend/apps/chat/priv/* linguist-vendored
+frontend/assets/* linguist-vendored
 
