@@ -1,3 +1,6 @@
+Basic webhat based on Cowboy web server and websockets.
+Frontend - Elm.
+
 ### How to run
 1) Clone the repo
 2) cd backend
