@@ -1,4 +1,4 @@
-Basic webhat based on Cowboy web server and websockets.
+Basic webchat based on Cowboy web server and websockets.
 Frontend - Elm.
 
 ### How to run
